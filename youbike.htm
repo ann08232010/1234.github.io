@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouBike 2.0 即時查詢</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+        .bike-card { transition: all 0.3s ease; }
+        .bike-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-custom { animation: spin 1s linear infinite; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white rounded-3xl shadow-xl p-6 md:p-8 mb-8 border border-slate-100">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-black text-slate-800 mb-2">YouBike 2.0 找站點</h1>
+                <p class="text-slate-500">輸入地點，自動過濾出距離最近的 5 個站點</p>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-3">
+                <input type="text" id="locationInput"
+                       placeholder="搜尋地點 (例: 101, 台北車站, 公館)"
+                       class="flex-1 px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all">
+                <button id="searchBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-8 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-red-500/20">
+                    <span id="btnText">搜尋</span>
+                    <svg id="btnSpinner" class="hidden animate-spin-custom h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="statusMessage" class="hidden text-center py-4 mb-4 bg-blue-50 text-blue-600 rounded-2xl text-sm font-medium">
+            <p id="statusText"></p>
+        </div>
+
+        <div id="dataContainer" class="grid gap-4">
+            <div id="placeholder" class="text-center py-20 bg-white/50 rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
+                <p>在上方搜尋框輸入地點開始查詢</p>
+            </div>
+        </div>
+
+        <footer class="mt-12 text-center text-slate-400 text-xs">
+            資料來源：臺北市政府交通局即時資料
+        </footer>
+    </div>
+
+    <script>
+        const searchBtn = document.getElementById('searchBtn');
+        const locationInput = document.getElementById('locationInput');
+        const dataContainer = document.getElementById('dataContainer');
+        const placeholder = document.getElementById('placeholder');
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+        const statusMessage = document.getElementById('statusMessage');
+        const statusText = document.getElementById('statusText');
+
+        // 當前搜尋目標的座標
+        let currentTargetCoords = null;
+
+        // 台北市 YouBike 2.0 即時 API 地址
+        const API_URL = 'https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json';
+        const GEO_API_URL = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q=';
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        async function handleSearch() {
+            const query = locationInput.value.trim();
+            if (!query) return;
+
+            setLoading(true, `正在定位「${query}」...`);
+            dataContainer.innerHTML = '';
+            placeholder.classList.add('hidden');
+
+            try {
+                // 1. 座標轉換
+                const geoRes = await fetch(`${GEO_API_URL}${encodeURIComponent(query + ' 台北')}`);
+                const geoData = await geoRes.json();
+
+                if (!geoData || geoData.length === 0) throw new Error("找不到該地點，請輸入更具體的地名。");
+
+                const targetLat = parseFloat(geoData[0].lat);
+                const targetLon = parseFloat(geoData[0].lon);
+                currentTargetCoords = { lat: targetLat, lon: targetLon };
+
+                updateStatus(`成功定位！正在讀取 YouBike 即時數據...`);
+
+                // 2. 獲取 YouBike 資料
+                const bikeRes = await fetch(API_URL);
+                const bikeArray = await bikeRes.json();
+
+                // 3. 過濾並計算距離
+                const stations = bikeArray
+                    .map(s => {
+                        const sLat = parseFloat(s.latitude || s.lat);
+                        const sLng = parseFloat(s.longitude || s.lng);
+                        return {
+                            ...s,
+                            lat_fixed: sLat,
+                            lng_fixed: sLng,
+                            dist: calculateDistance(targetLat, targetLon, sLat, sLng)
+                        };
+                    })
+                    .sort((a, b) => a.dist - b.dist)
+                    .slice(0, 5);
+
+                renderResults(stations, query);
+                statusMessage.classList.add('hidden');
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function setLoading(isLoading, msg = '') {
+            searchBtn.disabled = isLoading;
+            btnText.innerText = isLoading ? "處理中" : "搜尋";
+            isLoading ? btnSpinner.classList.remove('hidden') : btnSpinner.classList.add('hidden');
+            if (isLoading) {
+                statusMessage.classList.remove('hidden');
+                statusText.innerText = msg;
+            }
+        }
+
+        function updateStatus(msg) {
+            statusText.innerText = msg;
+        }
+
+        function showError(msg) {
+            dataContainer.innerHTML = `
+                <div class="bg-red-50 text-red-500 p-8 rounded-3xl border border-red-100 text-center font-bold">
+                    ${msg}
+                </div>
+            `;
+            statusMessage.classList.add('hidden');
+        }
+
+        function renderResults(stations, query) {
+            if (stations.length === 0) {
+                showError("附近沒有 YouBike 站點。");
+                return;
+            }
+
+            dataContainer.innerHTML = `
+                <div class="px-2 pb-2 text-slate-400 text-sm italic">
+                    📍 顯示距離「${query}」中心最近的 5 個站點
+                </div>
+            ` + stations.map(s => {
+                const available = parseInt(s.available_rent_bikes !== undefined ? s.available_rent_bikes : s.sbi) || 0;
+                const emptySlots = parseInt(s.available_return_bikes !== undefined ? s.available_return_bikes : s.bemp) || 0;
+
+                const distanceText = s.dist > 1000 ? `${(s.dist/1000).toFixed(1)}km` : `${Math.round(s.dist)}m`;
+                const name = (s.sna || "").replace('YouBike2.0_', '');
+                const address = s.ar || "無地址資訊";
+
+                // 生成 Google Maps 步行導航連結 (從站點到目標點)
+                const mapLink = `https://www.google.com/maps/dir/?api=1&origin=${s.lat_fixed},${s.lng_fixed}&destination=${currentTargetCoords.lat},${currentTargetCoords.lon}&travelmode=walking`;
+
+                return `
+                    <div class="bike-card bg-white p-6 rounded-3xl border border-slate-100 flex flex-col gap-4">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <h3 class="font-bold text-slate-800 text-lg">${name}</h3>
+                                    <span class="text-[11px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">${distanceText}</span>
+                                </div>
+                                <p class="text-slate-400 text-xs">${address}</p>
+                            </div>
+
+                            <div class="flex gap-4 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0 border-slate-50">
+                                <div class="flex-1 md:w-20 text-center">
+                                    <p class="text-2xl font-black ${available > 0 ? 'text-emerald-500' : 'text-red-400'}">${available}</p>
+                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">可借</p>
+                                </div>
+                                <div class="w-px h-8 bg-slate-100 self-center hidden md:block"></div>
+                                <div class="flex-1 md:w-20 text-center">
+                                    <p class="text-2xl font-black ${emptySlots > 0 ? 'text-blue-500' : 'text-red-400'}">${emptySlots}</p>
+                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">可還</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end pt-2">
+                            <a href="${mapLink}" target="_blank" class="w-full md:w-auto text-center px-6 py-2.5 bg-slate-800 hover:bg-black text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                </svg>
+                                查看步行路線
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        locationInput.addEventListener('keypress', (e) => e.key === 'Enter' && handleSearch());
+        searchBtn.addEventListener('click', handleSearch);
+    </script>
+</body>
+</html>
