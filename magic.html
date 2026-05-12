@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 數位影像工作坊</title>
+    <style>
+        :root { --bg: #121212; --panel: #1e1e1e; --accent: #00e676; --text: #e0e0e0; }
+        body { margin: 0; display: flex; height: 100vh; background: var(--bg); color: var(--text); font-family: sans-serif; }
+
+        /* 控制面板 */
+        #sidebar { width: 300px; background: var(--panel); padding: 20px; border-right: 1px solid #333; }
+
+        /* 畫布區 */
+        #main { flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        canvas { max-width: 90%; max-height: 90%; box-shadow: 0 0 20px rgba(0,0,0,0.5); background: #000; }
+
+        .control-group { margin-bottom: 25px; }
+        button { width: 100%; padding: 10px; margin-bottom: 10px; cursor: pointer; background: #333; color: white; border: none; border-radius: 4px; }
+        button:hover { background: var(--accent); color: #000; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>影像工作坊</h2>
+    <input type="file" id="upload" accept="image/*" style="display:none">
+    <button onclick="document.getElementById('upload').click()">上傳圖片</button>
+
+    <div class="control-group">
+        <label>亮度調整</label>
+        <input type="range" id="brightness" min="0" max="200" value="100" style="width:100%">
+    </div>
+
+    <button onclick="applyFilter('grayscale')">黑白效果</button>
+    <button onclick="applyFilter('invert')">負片效果</button>
+    <button onclick="resetImage()">重置圖片</button>
+    <hr>
+    <button onclick="downloadImage()" style="background: var(--accent); color: #000; font-weight: bold;">下載處理後圖片</button>
+</div>
+
+<div id="main">
+    <canvas id="canvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const upload = document.getElementById('upload');
+    const brightnessInput = document.getElementById('brightness');
+
+    let originalImage = null;
+
+    // 處理圖片上傳
+    upload.addEventListener('change', (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                originalImage = img;
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    // 濾鏡邏輯：使用 CSS filter 對 Canvas 進行視覺操作
+    function applyFilter(type) {
+        if (!originalImage) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        let filterStr = `brightness(${brightnessInput.value}%)`;
+        if (type === 'grayscale') filterStr += ' grayscale(100%)';
+        if (type === 'invert') filterStr += ' invert(100%)';
+
+        ctx.filter = filterStr;
+        ctx.drawImage(originalImage, 0, 0);
+    }
+
+    // 亮度監聽
+    brightnessInput.addEventListener('input', () => applyFilter());
+
+    function resetImage() {
+        if (!originalImage) return;
+        ctx.filter = 'none';
+        ctx.drawImage(originalImage, 0, 0);
+    }
+
+    // 下載圖片
+    function downloadImage() {
+        const link = document.createElement('a');
+        link.download = 'edited-image.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    }
+</script>
+</body>
+</html>
