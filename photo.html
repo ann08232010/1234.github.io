@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>美女美編神器 - 韓式時尚影像工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-color: #1e293b;
+            --accent-color: #ec4899;
+            --text-color: #f1f5f9;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        .control-panel {
+            background-color: var(--panel-color);
+            box-shadow: 4px 0 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .canvas-container {
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            position: relative;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            background-color: #000;
+        }
+
+        .btn {
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
+        .btn:active { transform: translateY(0); }
+
+        .tab-btn.active {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .effect-btn.active {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+        }
+
+        .tool-btn.active {
+            background-color: #334155;
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        input[type=range] { accent-color: var(--accent-color); }
+
+        .preview-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.7);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            border: 1px solid #334155;
+            backdrop-filter: blur(4px);
+            z-index: 50;
+        }
+
+        .sticker-item {
+            cursor: pointer;
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+        .sticker-item:hover { transform: scale(1.2); }
+
+        .pink-range {
+            accent-color: #ec4899;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="flex h-full w-full">
+        <!-- 左側控制面板 -->
+        <aside class="control-panel w-80 h-full flex flex-col p-6 z-10">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                    美女美編神器
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">時尚、韓風、零門檻</p>
+            </div>
+
+            <!-- 功能切換分頁 -->
+            <div class="flex bg-slate-800 rounded-lg p-1 mb-6">
+                <button onclick="switchTab('adjust')" id="tab-adjust" class="tab-btn active flex-1 py-1 text-xs rounded-md transition-all">美顏濾鏡</button>
+                <button onclick="switchTab('draw')" id="tab-draw" class="tab-btn flex-1 py-1 text-xs rounded-md transition-all">創意筆刷</button>
+                <button onclick="switchTab('sticker')" id="tab-sticker" class="tab-btn flex-1 py-1 text-xs rounded-md transition-all">可愛貼圖</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto pr-1 space-y-6">
+                <!-- 調整模式面板 -->
+                <div id="panel-adjust" class="space-y-6">
+                    <section>
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">檔案管理</label>
+                        <div class="space-y-2">
+                            <input type="file" id="imageInput" accept="image/*" class="hidden">
+                            <button onclick="document.getElementById('imageInput').click()" class="btn w-full py-2 bg-pink-600 rounded-lg text-sm font-medium">上傳美照</button>
+                            <button id="downloadBtn" class="btn w-full py-2 bg-slate-700 rounded-lg text-sm font-medium text-slate-300">保存作品</button>
+                        </div>
+                    </section>
+
+                    <section>
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">影像調整</label>
+                        <div class="space-y-3">
+                            <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700 text-xs">
+                                <div class="flex justify-between mb-1"><span>亮度</span><span id="brightnessValue">100%</span></div>
+                                <input type="range" id="brightnessRange" min="0" max="200" value="100" class="w-full pink-range">
+                            </div>
+                            <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700 text-xs">
+                                <div class="flex justify-between mb-1"><span>柔焦模糊</span><span id="blurValue">0px</span></div>
+                                <input type="range" id="blurRange" min="0" max="20" value="0" step="0.5" class="w-full pink-range">
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">韓系 & 特效 (點擊可取消)</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="koreanBtn" class="effect-btn btn py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs hover:bg-slate-700">韓系粉嫩</button>
+                            <button id="grayBtn" class="effect-btn btn py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs hover:bg-slate-700">黑白格調</button>
+                            <button id="invertBtn" class="effect-btn btn py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs hover:bg-slate-700">潮流負片</button>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- 筆刷模式面板 -->
+                <div id="panel-draw" class="hidden space-y-6">
+                    <section>
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">工具切換</label>
+                        <div class="flex gap-2 mb-4">
+                            <button id="brushBtn" class="tool-btn active flex-1 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs flex items-center justify-center gap-2">
+                                <span>🖌️</span> 畫筆
+                            </button>
+                            <button id="eraserBtn" class="tool-btn flex-1 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs flex items-center justify-center gap-2">
+                                <span>🧽</span> 橡皮擦
+                            </button>
+                        </div>
+
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">參數設定</label>
+                        <div class="space-y-4">
+                            <div id="brushColorControl" class="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                                <span class="text-xs">筆觸顏色</span>
+                                <input type="color" id="brushColor" value="#ec4899" class="bg-transparent w-8 h-8 cursor-pointer border-none">
+                            </div>
+                            <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700 text-xs">
+                                <div class="flex justify-between mb-1"><span>粗細大小</span><span id="brushSizeValue">5px</span></div>
+                                <input type="range" id="brushSize" min="1" max="80" value="5" class="w-full pink-range">
+                            </div>
+                            <button id="clearDrawBtn" class="btn w-full py-2 bg-red-900/30 border border-red-800/50 rounded-lg text-xs text-red-400">清空所有筆跡</button>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- 貼圖模式面板 -->
+                <div id="panel-sticker" class="hidden space-y-6">
+                    <section>
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">貼圖編輯器</label>
+                        <div id="stickerScaleControl" class="p-3 bg-pink-900/20 rounded-xl border border-pink-700/30 text-xs mb-4 opacity-50 pointer-events-none">
+                            <div class="flex justify-between mb-1 text-pink-300"><span>當前貼圖縮放</span><span id="stickerSizeValue">100%</span></div>
+                            <input type="range" id="stickerScaleRange" min="10" max="400" value="100" class="w-full pink-range">
+                        </div>
+
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 block">點擊加入貼圖</label>
+                        <div class="grid grid-cols-4 gap-3 p-3 bg-slate-800/50 rounded-xl border border-slate-700 text-center">
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🎀')">🎀</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('💖')">💖</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🤳')">🤳</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🦄')">🦄</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🍦')">🍦</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('📸')">📸</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🦋')">🦋</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('👑')">👑</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('✨')">✨</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🌈')">🌈</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🍬')">🍬</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🐱')">🐱</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🌸')">🌸</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🍀')">🍀</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('💎')">💎</span>
+                            <span class="sticker-item text-2xl" onclick="addNewSticker('🧸')">🧸</span>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <button id="resetBtn" class="btn w-full py-2 mt-4 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-400 hover:text-white">回歸原始狀態</button>
+        </aside>
+
+        <!-- 右側畫布預覽區 -->
+        <main class="canvas-container flex-1 relative" id="canvasWrapper">
+            <div id="emptyState" class="text-center">
+                <div class="w-16 h-16 bg-pink-900/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-pink-700/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 10l.01 0"/><path d="M15 10l.01 0"/><path d="M9.5 15a3.5 3.5 0 0 0 5 0"/></svg>
+                </div>
+                <p class="text-slate-500 text-sm italic">今天也要拍出美美的照片～</p>
+            </div>
+
+            <div class="preview-badge hidden" id="infoBadge">解析度: -</div>
+            <div class="relative inline-block" id="canvasHolder">
+                <canvas id="mainCanvas" class="hidden"></canvas>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        const offCanvas = document.createElement('canvas');
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+        const brushCanvas = document.createElement('canvas');
+        const brushCtx = brushCanvas.getContext('2d');
+
+        const imageInput = document.getElementById('imageInput');
+
+        // 狀態管理
+        let originalImage = null;
+        let isDrawing = false;
+        let currentMode = 'adjust';
+        let currentEffect = null;
+        let currentTool = 'brush'; // 'brush' 或 'eraser'
+
+        // 貼圖系統狀態
+        let stickers = [];
+        let draggingSticker = null;
+        let selectedSticker = null;
+
+        // UI 元素
+        const brightnessRange = document.getElementById('brightnessRange');
+        const blurRange = document.getElementById('blurRange');
+        const brushColor = document.getElementById('brushColor');
+        const brushSize = document.getElementById('brushSize');
+        const brushBtn = document.getElementById('brushBtn');
+        const eraserBtn = document.getElementById('eraserBtn');
+        const brushColorControl = document.getElementById('brushColorControl');
+        const stickerScaleRange = document.getElementById('stickerScaleRange');
+        const stickerScaleControl = document.getElementById('stickerScaleControl');
+        const emptyState = document.getElementById('emptyState');
+        const infoBadge = document.getElementById('infoBadge');
+
+        // --- 1. 分頁切換 ---
+        function switchTab(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${mode}`).classList.add('active');
+            document.getElementById('panel-adjust').classList.add('hidden');
+            document.getElementById('panel-draw').classList.add('hidden');
+            document.getElementById('panel-sticker').classList.add('hidden');
+            document.getElementById(`panel-${mode}`).classList.remove('hidden');
+            canvas.style.cursor = mode === 'draw' ? 'crosshair' : (mode === 'sticker' ? 'move' : 'default');
+
+            if (mode !== 'sticker') {
+                selectedSticker = null;
+                updateStickerUI();
+                renderAll();
+            }
+        }
+
+        // --- 2. 圖片處理核心 ---
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    canvas.width = offCanvas.width = brushCanvas.width = img.width;
+                    canvas.height = offCanvas.height = brushCanvas.height = img.height;
+
+                    stickers = [];
+                    selectedSticker = null;
+                    brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+                    currentEffect = null;
+                    updateEffectButtons();
+                    updateFilteredImage();
+                    renderAll();
+
+                    canvas.classList.remove('hidden');
+                    emptyState.classList.add('hidden');
+                    infoBadge.classList.remove('hidden');
+                    infoBadge.innerText = `解析度: ${img.width} x ${img.height}`;
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function updateFilteredImage() {
+            if (!originalImage) return;
+
+            offCtx.clearRect(0, 0, offCanvas.width, offCanvas.height);
+            offCtx.save();
+            offCtx.filter = `brightness(${brightnessRange.value}%) blur(${blurRange.value}px)`;
+            offCtx.drawImage(originalImage, 0, 0);
+            offCtx.restore();
+
+            if (currentEffect) {
+                const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+                const data = imageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i], g = data[i+1], b = data[i+2];
+
+                    if (currentEffect === 'korean') {
+                        data[i] = Math.min(255, r * 1.1 + 10);
+                        data[i+1] = Math.min(255, g * 1.05 + 5);
+                        data[i+2] = Math.min(255, b * 1.1 + 15);
+                    } else if (currentEffect === 'gray') {
+                        const avg = 0.299 * r + 0.587 * g + 0.114 * b;
+                        data[i] = data[i+1] = data[i+2] = avg;
+                    } else if (currentEffect === 'invert') {
+                        data[i] = 255 - r;
+                        data[i+1] = 255 - g;
+                        data[i+2] = 255 - b;
+                    }
+                }
+                offCtx.putImageData(imageData, 0, 0);
+            }
+        }
+
+        function renderAll() {
+            if (!originalImage) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(offCanvas, 0, 0);
+            ctx.drawImage(brushCanvas, 0, 0);
+
+            stickers.forEach(s => {
+                ctx.save();
+                ctx.font = `${s.size}px serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                if (s === selectedSticker && currentMode === 'sticker') {
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = "#ec4899";
+                }
+
+                ctx.fillText(s.emoji, s.x, s.y);
+                ctx.restore();
+            });
+        }
+
+        function updateEffectButtons() {
+            document.querySelectorAll('.effect-btn').forEach(btn => btn.classList.remove('active'));
+            if (currentEffect === 'korean') document.getElementById('koreanBtn').classList.add('active');
+            if (currentEffect === 'gray') document.getElementById('grayBtn').classList.add('active');
+            if (currentEffect === 'invert') document.getElementById('invertBtn').classList.add('active');
+        }
+
+        function toggleEffect(effect) {
+            if (!originalImage) return;
+            currentEffect = (currentEffect === effect) ? null : effect;
+            updateEffectButtons();
+            updateFilteredImage();
+            renderAll();
+        }
+
+        brightnessRange.addEventListener('input', () => {
+            document.getElementById('brightnessValue').innerText = `${brightnessRange.value}%`;
+            updateFilteredImage();
+            renderAll();
+        });
+        blurRange.addEventListener('input', () => {
+            document.getElementById('blurValue').innerText = `${blurRange.value}px`;
+            updateFilteredImage();
+            renderAll();
+        });
+
+        document.getElementById('koreanBtn').addEventListener('click', () => toggleEffect('korean'));
+        document.getElementById('grayBtn').addEventListener('click', () => toggleEffect('gray'));
+        document.getElementById('invertBtn').addEventListener('click', () => toggleEffect('invert'));
+
+        // --- 3. 畫筆與橡皮擦邏輯 ---
+        brushBtn.addEventListener('click', () => {
+            currentTool = 'brush';
+            brushBtn.classList.add('active');
+            eraserBtn.classList.remove('active');
+            brushColorControl.style.opacity = "1";
+            brushColorControl.style.pointerEvents = "auto";
+        });
+
+        eraserBtn.addEventListener('click', () => {
+            currentTool = 'eraser';
+            eraserBtn.classList.add('active');
+            brushBtn.classList.remove('active');
+            brushColorControl.style.opacity = "0.5";
+            brushColorControl.style.pointerEvents = "none";
+        });
+
+        // --- 4. 貼圖縮放邏輯 ---
+        stickerScaleRange.addEventListener('input', () => {
+            if (selectedSticker) {
+                const baseSize = canvas.width / 10;
+                selectedSticker.scale = stickerScaleRange.value / 100;
+                selectedSticker.size = baseSize * selectedSticker.scale;
+                document.getElementById('stickerSizeValue').innerText = `${stickerScaleRange.value}%`;
+                renderAll();
+            }
+        });
+
+        function updateStickerUI() {
+            if (selectedSticker) {
+                stickerScaleControl.style.opacity = "1";
+                stickerScaleControl.style.pointerEvents = "auto";
+                stickerScaleRange.value = selectedSticker.scale * 100;
+                document.getElementById('stickerSizeValue').innerText = `${Math.round(selectedSticker.scale * 100)}%`;
+            } else {
+                stickerScaleControl.style.opacity = "0.5";
+                stickerScaleControl.style.pointerEvents = "none";
+                document.getElementById('stickerSizeValue').innerText = `100%`;
+            }
+        }
+
+        // --- 5. 繪製與移動系統 ---
+        canvas.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        // 觸控支援
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleMouseDown(e.touches[0]);
+        });
+        window.addEventListener('touchmove', (e) => {
+            handleMouseMove(e.touches[0]);
+        });
+        window.addEventListener('touchend', handleMouseUp);
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+
+        function handleMouseDown(e) {
+            if (!originalImage) return;
+            const pos = getMousePos(e);
+
+            if (currentMode === 'sticker') {
+                let found = false;
+                for (let i = stickers.length - 1; i >= 0; i--) {
+                    const s = stickers[i];
+                    const dist = Math.sqrt((pos.x - s.x)**2 + (pos.y - s.y)**2);
+                    if (dist < s.size / 2) {
+                        draggingSticker = s;
+                        selectedSticker = s;
+                        stickers.splice(i, 1);
+                        stickers.push(s);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) selectedSticker = null;
+                updateStickerUI();
+                renderAll();
+            } else if (currentMode === 'draw') {
+                isDrawing = true;
+                brushCtx.beginPath();
+                brushCtx.moveTo(pos.x, pos.y);
+
+                // 設定模式
+                if (currentTool === 'eraser') {
+                    brushCtx.globalCompositeOperation = 'destination-out';
+                } else {
+                    brushCtx.globalCompositeOperation = 'source-over';
+                }
+            }
+        }
+
+        function handleMouseMove(e) {
+            if (!originalImage) return;
+            const pos = getMousePos(e);
+
+            if (currentMode === 'sticker' && draggingSticker) {
+                draggingSticker.x = pos.x;
+                draggingSticker.y = pos.y;
+                renderAll();
+            } else if (currentMode === 'draw' && isDrawing) {
+                brushCtx.lineTo(pos.x, pos.y);
+                brushCtx.strokeStyle = currentTool === 'eraser' ? 'rgba(0,0,0,1)' : brushColor.value;
+                brushCtx.lineWidth = brushSize.value;
+                brushCtx.lineCap = 'round';
+                brushCtx.lineJoin = 'round';
+                brushCtx.stroke();
+                renderAll();
+            }
+        }
+
+        function handleMouseUp() {
+            isDrawing = false;
+            draggingSticker = null;
+        }
+
+        // --- 6. 其它功能 ---
+        function addNewSticker(emoji) {
+            if (!originalImage) return;
+            const baseSize = canvas.width / 10;
+            const newSticker = {
+                emoji: emoji,
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                size: baseSize,
+                scale: 1.0
+            };
+            stickers.push(newSticker);
+            selectedSticker = newSticker;
+            updateStickerUI();
+            renderAll();
+            if (currentMode !== 'sticker') switchTab('sticker');
+        }
+
+        document.getElementById('brushSize').addEventListener('input', (e) => {
+            document.getElementById('brushSizeValue').innerText = `${e.target.value}px`;
+        });
+
+        document.getElementById('clearDrawBtn').addEventListener('click', () => {
+            brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+            renderAll();
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            if (!originalImage) return;
+            brightnessRange.value = 100;
+            blurRange.value = 0;
+            stickers = [];
+            selectedSticker = null;
+            currentEffect = null;
+            currentTool = 'brush';
+            brushBtn.click();
+            updateEffectButtons();
+            updateStickerUI();
+            brushCtx.clearRect(0, 0, brushCanvas.width, brushCanvas.height);
+            document.getElementById('brightnessValue').innerText = '100%';
+            document.getElementById('blurValue').innerText = '0px';
+            updateFilteredImage();
+            renderAll();
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (!originalImage) return;
+            const link = document.createElement('a');
+            link.download = `Pretty-Beauty-Art-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
+</body>
+</html>
